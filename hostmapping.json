@@ -1,0 +1,9 @@
+{
+"blueprint":"qse-1-nodes-42",
+"default_password":"admin",
+"host_groups":[
+{ "name":"MGMT1",
+"hosts":[ { "fqdn":"sherpavm" } ] }
+]
+}
+

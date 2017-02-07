@@ -1,0 +1,607 @@
+template_generator() {
+  REGEX='(\$\{[a-zA-Z_][a-zA-Z_0-9]*\})'
+  if [ -e $2 ]; then
+    mv -f $2 "$2.bak"
+  fi
+  cat $1 |
+  while read line ; do
+    while [[ "$line" =~ $REGEX ]] ; do
+      LHS=${BASH_REMATCH[1]}
+      RHS="$(eval echo "\"$LHS\"")"
+      line=${line//$LHS/$RHS}
+    done
+    echo $line >> $2
+  done
+}
+
+generateBlueprint() {
+  hosts=(`cat $1`)
+  blueprint="$2"
+  mode="$3"
+  size=${#hosts[@]}
+  if [ "$size" = "1" ]; then
+    echo -e "\nSingle node $mode blueprint generation"
+    export MGMT1=${hosts[0]}
+  elif [ "$size" = "5" ]; then
+    echo -e "\nFive node $mode blueprint generation"
+    export MGMT1=${hosts[0]}
+    export MGMT2=${hosts[1]}
+    export WORKER1=${hosts[2]}
+    export WORKER2=${hosts[3]}
+    export WORKER2=${hosts[4]}
+  fi
+ 
+  template_generator $blueprint blueprint.json
+}
+
+registerBlueprint() {
+  HOSTNAME="$1"
+  BLUEPRINT_NAME="$2"
+  BLUEPRINT_FILE="$3"
+  #- Register the blueprint to ambari server -#
+  #echo curl -u admin:admin -H 'X-Requested-By:ambari' -X POST -d @$BLUEPRINT_FILE http://$HOSTNAME:8080/api/v1/blueprints/$BLUEPRINT_NAME?validate_topology=false --silent -w "%{http_code}"
+  resp="000"
+  while [ "$resp" == "000" ]; do
+    json_out=`curl -u admin:admin -H 'X-Requested-By:ambari' -X POST -d @$BLUEPRINT_FILE http://$HOSTNAME:8080/api/v1/blueprints/$BLUEPRINT_NAME?validate_topology=false --silent -w "%{http_code}"`
+
+    resp=${json_out:(-3)}
+  done
+  if [[ "$resp" == "201" ]]; then
+    echo "Registered the blueprint successfully"
+  else
+    echo "Failed registering the blueprint"
+    echo $json_out;
+    echo $resp;
+    exit 1;
+  fi
+}
+
+generateHostmapping() {
+  hosts=`cat $1`
+  mode="$2"
+  size=${#hosts[@]}
+  count=0
+  WORKERS=""
+  if [ "$size" = "1" ]; then
+    echo "Single node $mode hostmapping generation"
+	export MGMT1=${hosts[0]}
+    template_generator template_single_hostmapping.json hostmapping.json
+  elif [ "$size" = "5" ]; then
+    echo "Five node $mode hostmapping generation"
+    for host in ${hosts}; do
+      if [ $count -eq  0 ]; then
+        export MGMT1="$host"
+      elif [ $count -eq 1 ]; then
+        export MGMT2="$host"
+      else
+        export WORKERS="$WORKERS,{ \"fqdn\":\"$host\" }"
+      fi
+      (( count++ ))
+    done
+    if [[ $WORKERS == ,* ]]; then
+      WORKERS=${WORKERS#","}
+    fi
+    template_generator template_hostmapping.json hostmapping.json
+  fi
+}
+
+installCluster() {
+  respcode=`curl -u admin:admin -H 'X-Requested-By:ambari' -X POST -d @hostmapping.json http://$MGMT1:8080/api/v1/clusters/$CLUSTER_NAME --silent -w "%{http_code}"`
+  check_status=${respcode:(-3)}
+
+  if [[ "$check_status" != "202" ]]; then
+      echo "Failed to initiate install request. Which is expected"
+      echo $respcode
+      exit 1
+  else
+    echo "Request accepted. Installation is in progress..."
+  fi
+}
+
+checkProgress() {
+  #Fetch the href link to find status from the JSon returned
+  href=`echo $respcode | sed 's/\\\\\//\//g' | \
+        sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); \
+        for (i=1; i<=n; i++) print a[i]}' | \
+        sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | \
+        sed 's/\"//g' | grep -w href`
+
+  link=`echo $href | sed 's/href \: //g' `
+  #echo "Status is available at $link"
+
+
+  temp_percent=0;
+
+  echo -e "\nProgress : "
+  echo " "
+  loop_time=0
+
+  while [ "$temp_percent" != '100.0' ]
+    do
+      #Fetch the JSON from the href link got from the previous link
+      respjson=`curl -u admin:admin -H 'X-Requested-By:ambari' -X GET $link --silent`
+
+      temp=`echo $respjson | sed 's/\\\\\//\//g' | \
+            sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); \
+            for (i=1; i<=n; i++) print a[i]}' | \
+            sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | \
+            sed 's/\"//g' | grep -e progress_percent`
+
+      temp_percent=`echo $temp | sed 's/progress_percent \: //g'`
+      percent=${temp_percent%.*}
+
+      echo -ne "                                                                           \r"
+      echo -ne "$percent% ... time spent $loop_time seconds\r"
+      sleep 30s
+      let "loop_time=$loop_time+30"
+
+    done
+  printf "\n"
+}
+
+checkFinalStatus() {
+  #Fetch final JSON after 100% complete
+  finaljson=`curl -u admin:admin -H 'X-Requested-By:ambari' -X GET $link --silent`
+
+  status_var=`echo $finaljson | sed 's/\\\\\//\//g' | \
+              sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); \
+              for (i=1; i<=n; i++) print a[i]}' | \
+              sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | \
+              sed 's/\"//g' | grep -e request_status`
+
+  final_status=`echo $status_var | sed 's/request_status \: //g'`
+
+
+  if [[ "$final_status" == "COMPLETED" ]]
+    then
+      echo "Completed set up and starting of services for cluster $CLUSTER_NAME"
+  elif [[ "$final_status" == "ABORTED" ]]
+    then
+      echo "Setup was aborted.Please check logs"
+      containError=true
+  else
+      echo "Setup failed.Please Check logs"
+      containError=true
+  fi
+}
+
+startAllServices() {
+  docker exec iop-m curl -u admin:admin -i -H 'X-Requested-By: ambari' -X PUT -d '{"RequestInfo": {"context" :"Start All Services"}, "Body": {"ServiceInfo": {"state": "STARTED"}}}' http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/services >/dev/null 2>&1
+}
+
+trackProgress ()
+{
+    reQuest=$2
+		
+    #Fetch the href link to find status from the JSon returned
+    href=`echo $1 | sed 's/\\\\\//\//g' | sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | sed 's/\"//g' | grep -w href`
+
+    link=`echo $href | sed 's/href \: //g' `;
+    #echo "Status is available at";
+    #echo " $link";
+    temp_percent=0;
+
+    echo -e "\nProgress : "
+    loop_time=0
+    while [[ "$temp_percent" != '100.0' && "$temp_percent" != '' ]]
+    do
+      #Fetch the JSON from the href link got from the previous link
+      respjson=`curl -u admin:admin -H 'X-Requested-By:ambari' -X GET $link --silent`
+
+      temp=`echo $respjson | sed 's/\\\\\//\//g' | sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | sed 's/\"//g' | grep -e progress_percent`
+
+      temp_percent=`echo $temp | sed 's/progress_percent \: //g'`
+      percent=${temp_percent%.*}
+
+      echo -ne "                                                                           \r"
+      echo -ne "$percent% ... time spent $loop_time seconds\r"
+      sleep 10s
+      let "loop_time=$loop_time+10"
+    done
+
+    printf "\n"
+
+    #Fetch final JSON after 100% complete
+    finaljson=`curl -u admin:admin -H 'X-Requested-By:ambari' -X GET $link --silent`
+
+    status_var=`echo $finaljson | sed 's/\\\\\//\//g' | sed 's/[{}]//g' | awk -v k="text" '{n=split($0,a,","); for (i=1; i<=n; i++) print a[i]}' | sed 's/\"\:\"/\|/g' | sed 's/[\,]/ /g' | sed 's/\"//g' | grep -e request_status`
+
+    final_status=`echo $status_var | sed 's/request_status \: //g'`
+
+
+    if [[ "$final_status" == "COMPLETED" ]]
+    then
+		echo "Completed the request successfully"
+    elif [[ "$final_status" == "ABORTED" || "$final_status" == "FAILED" ]]
+    then
+      echo "Request was aborted.Please check logs."
+      exit 1
+    else
+      echo "Request failed.Please Check logs."
+      exit 1
+    fi
+}
+
+checkStatus ()
+{
+  status=$1
+  runCmd=$2
+  if [[ "$status" != "202" && "$status" != "200" && "$status" != "201" ]]
+  then
+    echo "Failed to run the request. not accepted"
+    echo $runCmd
+  else
+    echo "done"
+  fi
+}
+
+startService ()
+{
+  serviceName=$1
+  clusterName=$2
+  hostname=$3
+  startCmd=`curl -u admin:admin -H "X-Requested-By: ambari" -X PUT -d '{"RequestInfo": {"context" :"Start '"$serviceName"' via REST"}, "Body": {"ServiceInfo": {"state": "STARTED"}}}' http://${hostname}:8080/api/v1/clusters/$clusterName/services/$serviceName --silent -w "%{http_code}"`
+  status=${startCmd:(-3)}
+
+  if [[ "$status" != "202" && "$status" != "200" ]]
+  then
+    echo "Failed to initiate start $serviceName service request. not accepted"
+    echo $startCmd
+  else
+    echo "Start $1 request accepted. Execution in progress...";
+    trackProgress "$startCmd" $serviceName "start"
+    retryFlag=0
+  fi             		
+}
+
+stopService ()
+{
+  serviceName=$1
+  clusterName=$2
+  hostname=$3
+  stopCmd=`curl -u admin:admin -H "X-Requested-By: ambari" -X PUT -d '{"RequestInfo": {"context" :"Stop '"$serviceName"' via REST"}, "Body": {"ServiceInfo": {"state": "INSTALLED"}}}' http://${hostname}:8080/api/v1/clusters/$clusterName/services/$serviceName --silent -w "%{http_code}"`
+  status=${stopCmd:(-3)}
+
+  if [[ "$status" != "202" && "$status" != "200" ]]
+  then
+    echo "Failed to initiate stop $serviceName service request. not accepted"
+    echo $stopCmd
+  else
+    echo "Stop $serviceName request accepted. Execution in progress...";
+    trackProgress "$stopCmd" $serviceName "stop"
+    retryFlag=0
+  fi
+}
+
+restartService ()
+{
+  serviceName=$1
+  clusterName=$2
+  hostname=$3
+  stopService $serviceName $clusterName $hostname
+  startService $serviceName $clusterName $hostname
+}
+
+addService ()
+{
+  echo -e "\nAdding $1 service"
+  serviceName=$1
+  addCmd=`curl -u admin:admin -H "X-Requested-By:ambari" -i -X POST -d '{"ServiceInfo":{"service_name":"'$serviceName'"}}' http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/services --silent -w "%{http_code}"`
+  status=${addCmd:(-3)}
+  checkStatus $status $addCmd
+}
+
+addComponent ()
+{
+  serviceName=$1
+  componentName=$2
+  echo "adding $componentName for $serviceName"
+  addCmd=`curl -u admin:admin -H "X-Requested-By:ambari" -i -X POST http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/services/$serviceName/components/$componentName --silent -w "%{http_code}"`
+  status=${addCmd:(-3)}
+  checkStatus $status $addCmd
+}
+
+createConfig ()
+{
+  jSonData=$1
+  cfgCmd=`curl -u admin:admin -H "X-Requested-By:ambari" -i -X  POST -d $jSonData http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/configurations --silent -w "%{http_code}"`
+  status=${cfgCmd:(-3)}
+  checkStatus $status $cfgCmd
+}
+
+applyConfigtoCluster ()
+{
+  jSonData=$1
+  applyCmd=`curl -u admin:admin -H "X-Requested-By:ambari" -i -X  PUT -d $jSonData http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME --silent -w "%{http_code}"`
+  status=${applyCmd:(-3)}
+  checkStatus $status $applyCmd
+}
+
+createHostComponent ()
+{
+  jSonData=$1
+  tgtHostName=$2
+  hostCmd=`curl -u admin:admin -H "X-Requested-By:ambari" -i -X  POST -d $jSonData http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/hosts?Hosts/host_name=$tgtHostName --silent -w "%{http_code}"`
+  status=${hostCmd:(-3)}
+  checkStatus $status $hostCmd
+}
+
+prepareBigSql ()
+{
+  addService $1
+  addBigSQLComponents
+  createBigSQLConfig $2
+  applyBigSQLConfigtoCluster $2
+  createBigSQLHostComponent
+}
+
+addBigSQLComponents ()
+{
+  addComponent "BIGSQL" "BIGSQL_WORKER"
+  addComponent "BIGSQL" "BIGSQL_HEAD"
+  addComponent "BIGSQL" "BIGSQL_SECONDARY"
+}
+
+createBigSQLConfig ()
+{
+  VERSION=$1
+  echo "Creating bigsql-env config"
+  cfgCmd=`curl -u admin:admin -H "X-Requested-By:ambari" -i -X  POST -d '{"type":"bigsql-env","tag":'\"$VERSION\"',"properties":{"bigsql_continue_on_failure":"false","bigsql_db_path":"/var/ibm/bigsql/database","bigsql_ha_port":"20008","bigsql_hdfs_poolname":"autocachepool","bigsql_hdfs_poolsize":"0","bigsql_resource_percent":"25","db2_fcm_port_number":"28051","db2_port_number":"32051","enable_yarn":"NO","scheduler_admin_port":"7054","scheduler_service_port":"7053"}}' http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/configurations --silent -w "%{http_code}"`
+  status=${cfgCmd:(-3)}
+  checkStatus $status $cfgCmd
+
+  echo "Creating bigsql-users-env config"
+  cfgCmd=`curl -u admin:admin -H "X-Requested-By:ambari" -i -X  POST -d '{"type":"bigsql-users-env","tag":'\"$VERSION\"',"properties":{"ambari_user_login":"admin","ambari_user_password":"admin","bigsql_user" :"bigsql","bigsql_user_id":"2824","bigsql_user_password":"bigsql","enable_ldap":"NO"},"properties_attributes":{"ambari_user_password":{"toMask":"true"},"bigsql_user_password":{"toMask":"true"}}}' http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/configurations --silent -w "%{http_code}"`
+  status=${cfgCmd:(-3)}
+  checkStatus $status $cfgCmd
+}
+
+applyBigSQLConfigtoCluster ()
+{
+  VERSION=$1
+  echo "Applying bigsql-env config"
+  bigSqlcfg='{"Clusters":{"desired_configs":{"type":"bigsql-env","tag":'\"$VERSION\"'}}}'
+  applyConfigtoCluster "$bigSqlcfg"
+	
+  echo "Applying bigsql-users-env config"	
+  bigSqlcfg='{"Clusters":{"desired_configs":{"type":"bigsql-users-env","tag":'\"$VERSION\"'}}}'
+  applyConfigtoCluster "$bigSqlcfg"
+}
+
+createBigSQLHostComponent ()
+{
+  echo "Creating host component BIGSQL_HEAD"
+  bigSqlhcfg='{"host_components":[{"HostRoles":{"component_name":"BIGSQL_HEAD"}}]}'
+  createHostComponent "$bigSqlhcfg" ${MGMT1}
+
+  echo "Creating host component BIGSQL_SECONDARY"
+  bigSqlhcfg='{"host_components":[{"HostRoles":{"component_name":"BIGSQL_SECONDARY"}}]}'
+  createHostComponent "$bigSqlhcfg" ${MGMT1}
+
+  echo "Creating host component BIGSQL_WORKER"
+  bigSqlhcfg='{"host_components":[{"HostRoles":{"component_name":"BIGSQL_WORKER"}}]}'
+  createHostComponent "$bigSqlhcfg" ${MGMT1}
+}
+
+callInstall ()
+{
+  serviceName=$1
+  installCmd=`curl -u admin:admin -H "X-Requested-By: ambari" -X PUT -d '{"RequestInfo": {"context" :"Install '"$serviceName"' via REST"}, "Body": {"ServiceInfo": {"state": "INSTALLED"}}}' http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/services/$1 --silent -w "%{http_code}"`
+  status=${installCmd:(-3)}
+
+  if [[ "$status" != "202" && "$status" != "200" ]]
+  then
+    echo "Failed to initiate install $1 service request. not accepted"
+    echo $installCmd
+    containError=true
+  else
+    echo -e "\nInstall $1 request accepted. Execution in progress...";
+    trackProgress "$installCmd" "install"
+    if [[ "$1" != "PIG" && "$1" != "RSERV" && "$1" != "SLIDER" && "$1" != "SQOOP"  && "$1" != "SOLR" ]]
+    then
+      startCmd=`curl -u admin:admin -H "X-Requested-By: ambari" -X PUT -d '{"RequestInfo": {"context" :"Start '"$1"' via REST"}, "Body": {"ServiceInfo": {"state": "STARTED"}}}' http://${MGMT1}:8080/api/v1/clusters/$CLUSTER_NAME/services/$1 --silent -w "%{http_code}"`
+      status=${startCmd:(-3)}
+      if [[ "$status" != "202" && "$status" != "200" ]]
+      then
+        echo "Failed to initiate start $1 service request. not accepted"
+        echo $startCmd
+        containError=true
+      else
+        echo "Start $1 request accepted. Execution in progress...";
+        trackProgress "$startCmd" "start"
+      fi
+    fi
+  fi
+}
+
+knoxSetup ()
+{
+  #- knox setup for valueadds
+  echo -e "\nKnox setup for valueadds"
+  docker exec -i iop-m /bin/sh -c 'cd /usr/ibmpacks/bin/*/; printf "y\ny\ny\ny\ny\n" | ./knox_setup.sh -u admin -p admin -x 8080'
+  docker exec -i iop-m /bin/sh -c 'su -l knox -c "/usr/iop/current/knox-server/bin/ldap.sh start"'
+}
+
+restartStaleServices() {
+  hostName=$1
+  clusterName=$2
+  echo "Restarting stale services"
+  declare -a staleServices=("HDFS" "MAPREDUCE2" "YARN" "OOZIE" "ZOOKEEPER" "HBASE" "BIGSHEETS")
+  for service in "${staleServices[@]}"
+  do
+    printf "\n\n"
+    echo "$service service restarting"
+    restartService $service $clusterName $hostName
+  done
+}
+
+# Check ssh connectivity from current host to all hosts listed in hosts file passed
+checkssh() {
+  ssh -o 'PreferredAuthentications=publickey' $1 ls -la / > /dev/null
+  retCode=$?
+  if [[ $retCode == 0 ]]; then
+    echo "checkssh: passed"
+	statusSsh=true
+  else
+    echo "checkssh: failed."
+    containError=true
+  fi
+}
+
+# Check free space in /tmp directory of host
+checkFreeSpace() {
+  # required free space for /tmp in GB
+  minFreeSpace=10
+  # required free space for /var/lib/docker in GB
+  minDockerFreeSpace=10
+  host="$1"
+  echo "checkFreeSpace:"
+  freeKBtmp=`ssh $host df /tmp | awk 'NR>1' | awk '{print $4}'`
+  freeGBtmp=$(( $freeKBtmp / (1024 * 1024) ))
+  freeKBDocker=`ssh $host df /var/lib/docker | awk 'NR>1' | awk '{print $4}'`
+  freeGBDocker=$(( $freeKBDocker / (1024 * 1024) ))
+  if [[ $freeGBtmp -ge $minFreeSpace ]]; then
+    echo "  /tmp: passed"
+  else
+    echo "  /tmp: failed. Required freespace is $minFreeSpace GB, while current freespace is $freeGBtmp GB"
+    containError=true
+  fi
+  if [[ $freeGBDocker -ge $minDockerFreeSpace ]]; then
+    echo "  /var/lib/docker: passed"
+  else
+    echo "  /var/lib/docker: failed. Required freespace is $minDockerFreeSpace GB, while current freespace is $freeGBDocker GB"
+    containError=true
+  fi
+}
+
+# Check total physical memory in system
+checkSystemMemory() {
+  host="$1"
+  # required total memory in GB
+  minMemory=15
+  memKB=`ssh $host free | grep Mem | awk '{ print $2 }'`
+  memGB=$(( $memKB / (1024 * 1024) ))
+  if [[ $memGB -ge $minMemory ]]; then
+    echo "checkSystemMemory: passed"
+  else
+    echo "checkSystemMemory: failed. Minimum required memory is $minMemory GB, while found $memGB GB"
+    containError=true
+  fi
+}
+
+# Check cpu cores of the system
+checkCPUCores() {
+  host="$1"
+  minCPUCores=4
+  cores=`ssh $host cat /proc/cpuinfo | grep -c processor`
+  if [[ $cores -ge $minCPUCores ]]; then
+    echo "checkCPUCores: passed"
+  else
+    echo "checkCPUCores: failed. Minimum cores required is $minCPUCores, found on system is $cores"
+    containError=true
+  fi
+}
+
+# Check if docker is installed on system, version is 1.8.x or 1.9.x and if it is running
+checkDocker() {
+  echo "checkDocker:"
+  ssh $host yum list installed 2>&1 | grep docker &> /dev/null
+  retCode=$?
+  if [[ $retCode == 0 ]]; then
+    echo "  Docker Installed: passed"
+    version=`ssh $host docker version | grep Version | awk 'NR==1' | awk '{print $2}'`
+    if [[ $version == 1.8* ]] || [[ $version == 1.9* ]]; then
+      echo "  Valid docker version: passed"
+      ssh $host service docker status > /dev/null
+      retCode=$?
+      if [[ $retCode == 0 ]]; then
+        echo "  Docker running: passed"
+      else
+        echo "  Docker running: failed"
+        containError=true
+      fi
+    else
+      echo "  Valid docker version: failed"
+      containError=true
+    fi
+  else
+    echo "  Docker Installed: failed"
+    containError=true
+  fi
+}
+
+# Check if OS is RHEL 7.x or CentOS 7.x
+checkOS() {
+  host="$1"
+  systemRelease=`ssh $host cat /etc/system-release`
+  fileExists=$?
+  if [[ $fileExists -eq 0 ]]; then
+	if [[ $systemRelease == Red\ Hat*release\ 7* ]]; then
+	  echo "checkOS: passed"
+	elif [[ $systemRelease == CentOS*release\ 7* ]]; then
+	  echo "checkOS: passed"
+	else
+	  echo "Unsupported version of OS: $systemRelease"
+	  containError=true
+	fi
+  else
+    echo "checkOS: failed"
+	containError=true
+  fi 
+}
+
+# Check if hostname is reachable from current host
+checkHostname() {
+  host="$1"
+  getent hosts ${host} >> /dev/null
+  if [ "$?" == "0" ]; then
+    echo "checkHostname: passed"
+    statusHostname=true
+  else
+    echo "checkHostname: failed"
+	containError=true
+  fi
+}
+
+# Check if root access is there
+checkRoot() {
+  host="$1"
+  if [ "$(ssh $host id -u)" == "0" ]; then
+    echo "checkRoot: passed"
+  else
+    echo "checkRoot: failed"
+	containError=true
+  fi
+}
+
+# Perform pre-requisite checks
+prereqCheck() {
+  hosts=`cat $1`
+  for host in ${hosts}; do
+    statusHostname=false
+    statusSsh=false
+    echo -e "\n#host: $host"
+    checkHostname $host
+	if [[ $statusHostname == true ]]; then
+      checkssh $host
+	  if [[ $statusSsh == true ]]; then
+        checkOS $host
+        checkRoot $host
+        checkFreeSpace $host
+        checkSystemMemory $host
+        checkCPUCores $host
+        checkDocker $host
+      else
+	    echo "As ssh is not working, rest of the checks are skipped."
+	  fi
+	else
+	  echo "As hostname could not be resolved, rest of the checks are skipped."
+	fi
+  done
+  if [[ $containError == true ]]; then
+    echo -e "\nPrereq check failed"
+	exit 1
+  else
+    echo -e "\nPrereq check passed"
+  fi
+}

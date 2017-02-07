@@ -1,0 +1,318 @@
+{
+  "configurations" : [
+    {
+      "global": {
+        "hive_metastore_user_passwd": "hive"
+      }
+    },
+    {
+      "cluster-env" : {
+        "security_enabled" : "false",
+        "smokeuser" : "ambari-qa",
+        "user_group" : "hadoop"
+      }
+    },    
+    {
+      "mapred-site" : {
+          "mapreduce.task.io.sort.mb" : "128",
+          "mapreduce.map.memory.mb" : "512",
+          "mapreduce.reduce.memory.mb" : "512",
+          "mapreduce.reduce.java.opts" : "-Xmx512m",
+          "yarn.app.mapreduce.am.command-opts" : "-Xmx512m -Diop.version=${iop.version}",
+          "mapreduce.map.java.opts" : "-Xmx512m",
+          "yarn.app.mapreduce.am.resource.mb" : "512"
+      }
+    },
+    {
+      "core-site" : {
+        "fs.defaultFS" : "hdfs://${MGMT1}",
+        "ha.zookeeper.quorum" : "${MGMT1}:2181",
+        "hadoop.proxyuser.root.groups" : "*",
+        "hadoop.proxyuser.root.hosts" : "*",
+        "hadoop.proxyuser.bigsheets.groups" : "*",
+        "hadoop.proxyuser.bigsheets.hosts" : "*",
+        "hadoop.proxyuser.tauser.groups" : "*",
+        "hadoop.proxyuser.tauser.hosts" : "*",
+        "hadoop.proxyuser.bigr.groups" : "*",
+        "hadoop.proxyuser.bigr.hosts" : "*",
+        "hadoop.proxyuser.bigsql.groups" : "*",
+        "hadoop.proxyuser.bigsql.hosts" : "*",
+        "hadoop.proxyuser.biadmin.groups" : "*",
+        "hadoop.proxyuser.biadmin.hosts" : "*"
+      }
+    },
+    {
+      "hdfs-site" : {       
+        "dfs.ha.automatic-failover.enabled" : "false",
+        "dfs.namenode.http-address" : "${MGMT1}:50070",
+        "dfs.namenode.https-address" : "${MGMT1}:50470",
+        "dfs.encryption.key.provider.uri" : "kms://http@${MGMT1}:16000/kms", 
+        "dfs.permissions.superusergroup" :  "hdfs"
+      }
+    },
+    {
+      "yarn-site" : {
+        "hadoop.registry.rm.enabled" : "false",
+        "yarn.resourcemanager.ha.enabled" : "false",
+        "yarn.resourcemanager.webapp.address" : "${MGMT1}:8088",
+        "yarn.resourcemanager.recovery.enabled" : "true",
+        "yarn.log.server.url" : "http://${MGMT1}:19888/jobhistory/logs",
+        "yarn.resourcemanager.address" : "${MGMT1}:8050",
+        "yarn.timeline-service.address" : "${MGMT1}:10200",              
+        "yarn.resourcemanager.admin.address" : "${MGMT1}:8141", 
+        "yarn.resourcemanager.hostname" : "${MGMT1}",
+        "yarn.resourcemanager.resource-tracker.address" : "${MGMT1}:8025",        
+        "yarn.resourcemanager.scheduler.address" : "${MGMT1}:8030",  
+        "yarn.timeline-service.webapp.address" : "${MGMT1}:8188",
+        "yarn.timeline-service.webapp.https.address" : "${MGMT1}:8190",
+        "yarn.nodemanager.resource.memory-mb" : "4096",
+        "yarn.scheduler.minimum-allocation-mb" : "512",
+        "yarn.scheduler.minimum-allocation-vcores" : "1",
+        "yarn.scheduler.maximum-allocation-mb" : "512",
+        "yarn.nodemanager.vmem-pmem-ratio" : "5"
+      }
+    },      
+    {
+      "hadoop-env" : {
+          "hadoop_heapsize" : "512",
+          "dtnode_heapsize" : "256m",
+          "namenode_opt_newsize" : "128m",
+          "namenode_heapsize" : "256m",
+          "namenode_opt_maxpermsize" : "256m",
+          "nfsgateway_heapsize" : "256",
+          "namenode_opt_maxnewsize" : "128m",
+          "namenode_opt_permsize" : "128m"
+      }
+    },
+    {
+      "yarn-env" : {
+          "yarn_heapsize" : "256",
+          "apptimelineserver_heapsize" : "256",
+          "nodemanager_heapsize" : "400",
+          "resourcemanager_heapsize" : "256"
+      }
+    },
+    {
+      "mapred-env" : {
+          "jobhistory_heapsize" : "256"
+      }
+    },
+    {
+      "hbase-site" : {
+        "hbase.zookeeper.quorum" : "${MGMT1}",
+        "hbase.rootdir" : "hdfs:///apps/hbase/data",
+        "hbase.security.authentication" : "simple",
+        "hbase.security.authorization" : "true",
+        "hbase.rpc.engine" : "org.apache.hadoop.hbase.ipc.SecureRpcEngine",
+        "hbase.coprocessor.master.classes" : "org.apache.hadoop.hbase.security.access.AccessController",
+        "hbase.coprocessor.region.classes" : "org.apache.hadoop.hbase.security.access.AccessController",
+        "hbase.coprocessor.regionserver.classes" : "org.apache.hadoop.hbase.security.access.AccessController"
+      }
+    },      
+    {
+      "oozie-site" : {
+         "oozie.db.schema.name" : "oozie",
+         "oozie.service.JPAService.create.db.schema" : "true",
+         "oozie.service.JPAService.jdbc.driver" : "com.mysql.jdbc.Driver",
+         "oozie.service.JPAService.jdbc.username" : "oozie",
+         "oozie.service.JPAService.jdbc.password": "oozie",
+         "oozie.service.JPAService.jdbc.url" : "jdbc:mysql://${MGMT1}/oozie"
+      }
+    },
+    {
+      "oozie-env": {
+          "oozie_ambari_database" : "MySQL",
+          "oozie_database" : "Existing MySQL Database",
+          "oozie_database_name" : "oozie",
+          "oozie_database_type" : "mysql",
+          "oozie_existing_mysql_database" : "MySQL",
+          "oozie_existing_mysql_host" : "${MGMT1}",
+          "oozie_hostname" : "${MGMT1}",
+        "oozie_heapsize" : "512m",
+        "oozie_initial_heapsize" : "256m",
+        "oozie_permsize" : "256m"
+       }
+    },    
+    {
+      "hive-site" : {
+         "hive.zookeeper.quorum" :  "${MGMT1}",
+         "hive.cluster.delegation.token.store.zookeeper.connectString" : "${MGMT1}:2181",
+          "ambari.hive.db.schema.name" : "hive",
+          "javax.jdo.option.ConnectionDriverName" : "com.mysql.jdbc.Driver",
+          "javax.jdo.option.ConnectionUserName" : "hive",       
+          "javax.jdo.option.ConnectionPassword": "hive",
+          "javax.jdo.option.ConnectionURL" : "jdbc:mysql://${MGMT1}/hive?createDatabaseIfNotExist=true"
+      }
+    },
+    {
+       "hive-env": {
+          "hive.client.heapsize" : "256",
+          "hive.heapsize" : "256",
+          "hive.metastore.heapsize" : "256",
+          "hive_ambari_database" : "MySQL",
+          "hive_database" : "Existing MySQL Database",
+          "hive_database_name" : "hive",
+          "hive_metastore_user_passwd": "hive",
+          "hive_database_type" : "mysql",
+          "hive_existing_mysql_database" : "MySQL",
+          "hive_hostname" : "${MGMT1}"
+        }
+    },
+    {
+      "hbase-env" : {
+          "hbase_regionserver_xmn_max" : "512",
+          "hbase_regionserver_heapsize" : "256m",
+          "hbase_master_heapsize" : "256m"
+      }
+    },
+    {
+      "webhcat-site" : {
+        "templeton.zookeeper.hosts" :  "${MGMT1}:2181"
+      }
+    },
+    {
+      "kafka-broker" : {
+        "zookeeper.connect" : "${MGMT1}:2181"
+      }
+    },            
+    {
+      "knox-env" : {
+        "knox_master_secret" : "knox"
+      }
+    },
+    {
+      "users-ldif" : {
+		  "content" : "\\n# Licensed to the Apache Software Foundation (ASF) under one\\n# or more contributor license agreements.  See the NOTICE file\\n# distributed with this work for additional information\\n# regarding copyright ownership.  The ASF licenses this file\\n# to you under the Apache License, Version 2.0 (the\\n# \\\"License\\\"); you may not use this file except in compliance\\n# with the License.  You may obtain a copy of the License at\\n#\\n#     http://www.apache.org/licenses/LICENSE-2.0\\n#\\n# Unless required by applicable law or agreed to in writing, software\\n# distributed under the License is distributed on an \\\"AS IS\\\" BASIS,\\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\\n# See the License for the specific language governing permissions and\\n# limitations under the License.\\n\\nversion: 1\\n\\n# Please replace with site specific values\\ndn: dc=hadoop,dc=apache,dc=org\\nobjectclass: organization\\nobjectclass: dcObject\\no: Hadoop\\ndc: hadoop\\n\\n# Entry for a sample people container\\n# Please replace with site specific values\\ndn: ou=people,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass:organizationalUnit\\nou: people\\n\\n# Entry for a sample end user\\n# Please replace with site specific values\\ndn: uid=guest,ou=people,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass:person\\nobjectclass:organizationalPerson\\nobjectclass:inetOrgPerson\\ncn: Guest\\nsn: User\\nuid: guest\\nuserPassword:guest-password\\n\\n# Entry for a sample end user\\n# Please replace with site specific values\\ndn: uid=biadmin,ou=people,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass:person\\nobjectclass:organizationalPerson\\nobjectclass:inetOrgPerson\\ncn: biadmin\\nsn: biadmin\\nuid: biadmin\\nuserPassword:biadmin\\n\\n# entry for sample user admin\\ndn: uid=admin,ou=people,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass:person\\nobjectclass:organizationalPerson\\nobjectclass:inetOrgPerson\\ncn: Admin\\nsn: Admin\\nuid: admin\\nuserPassword:admin-password\\n\\n# entry for sample user sam\\ndn: uid=sam,ou=people,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass:person\\nobjectclass:organizationalPerson\\nobjectclass:inetOrgPerson\\ncn: sam\\nsn: sam\\nuid: sam\\nuserPassword:sam-password\\n\\n# entry for sample user tom\\ndn: uid=tom,ou=people,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass:person\\nobjectclass:organizationalPerson\\nobjectclass:inetOrgPerson\\ncn: tom\\nsn: tom\\nuid: tom\\nuserPassword:tom-password\\n\\n# create FIRST Level groups branch\\ndn: ou=groups,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass:organizationalUnit\\nou: groups\\ndescription: generic groups branch\\n\\n# create the analyst group under groups\\ndn: cn=analyst,ou=groups,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass: groupofnames\\ncn: analyst\\ndescription:analyst  group\\nmember: uid=sam,ou=people,dc=hadoop,dc=apache,dc=org\\nmember: uid=tom,ou=people,dc=hadoop,dc=apache,dc=org\\n\\n\\n# create the scientist group under groups\\ndn: cn=scientist,ou=groups,dc=hadoop,dc=apache,dc=org\\nobjectclass:top\\nobjectclass: groupofnames\\ncn: scientist\\ndescription: scientist group\\nmember: uid=sam,ou=people,dc=hadoop,dc=apache,dc=org"
+      }
+    },
+    {
+      "spark-env" : {
+		"content" : "\\n#!/usr/bin/env bash\\n\\n# This file is sourced when running various Spark programs.\\n# Copy it as spark-env.sh and edit that to configure Spark for your site.\\n\\n# Options read in YARN client mode\\n#SPARK_EXECUTOR_INSTANCES=\\\"2\\\" #Number of workers to start (Default: 2)\\n#SPARK_EXECUTOR_CORES=\\\"1\\\" #Number of cores for the workers (Default: 1).\\n#SPARK_EXECUTOR_MEMORY=\\\"1G\\\" #Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\\n#SPARK_DRIVER_MEMORY=\\\"512 Mb\\\" #Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)\\n#SPARK_YARN_APP_NAME=\\\"spark\\\" #The name of your application (Default: Spark)\\n#SPARK_YARN_QUEUE=\\\"~@~Xdefault~@~Y\\\" #The hadoop queue to use for allocation requests (Default: @~Xdefault~@~Y)\\n#SPARK_YARN_DIST_FILES=\\\"\\\" #Comma separated list of files to be distributed with the job.\\n#SPARK_YARN_DIST_ARCHIVES=\\\"\\\" #Comma separated list of archives to be distributed with the job.\\n\\n# Generic options for the daemons used in the standalone deploy mode\\n\\n# Alternate conf dir. (Default: ${SPARK_HOME}/conf)\\nexport JAVA_HOME={{java_home}}\\nexport SPARK_CONF_DIR=${SPARK_HOME:-{{spark_home}}}/conf\\n\\n# Where log files are stored.(Default:${SPARK_HOME}/logs)\\n#export SPARK_LOG_DIR=${SPARK_HOME:-{{spark_home}}}/logs\\nexport SPARK_LOG_DIR={{spark_log_dir}}\\n\\n# Where the pid file is stored. (Default: /tmp)\\nexport SPARK_PID_DIR={{spark_pid_dir}}\\n\\n# A string representing this instance of spark.(Default: $USER)\\nSPARK_IDENT_STRING=$USER\\n\\n# The scheduling priority for daemons. (Default: 0)\\nSPARK_NICENESS=0\\n\\nexport SPARK_PUBLIC_DNS={{spark_history_server_host}}\\nexport SPARK_HISTORY_OPTS=\\\"-Xmx256m -Dspark.history.ui.port={{spark_history_ui_port}} -Dspark.history.fs.logDirectory={{spark_eventlog_dir_default}}\\\"\\nexport HIVE_SERVER2_THRIFT_BIND_HOST={{spark_thrift_server_host}}\\nexport HIVE_SERVER2_THRIFT_PORT={{spark_thriftserver_port}}\\nexport HIVE_SERVER2_THRIFT_OPTS=\\\"-Xmx256m\\\"\\n\\nexport HADOOP_HOME=${HADOOP_HOME:-{{hadoop_home}}}\\nexport HADOOP_CONF_DIR=${HADOOP_CONF_DIR:-{{hadoop_conf_dir}}}"
+      }
+    },
+    {
+      "ta-database-config" : {
+        "database.create.new" : "Yes",
+        "database.working.dir" : "/usr/ibmpacks/current/text-analytics-web-tooling/catalog-store",
+        "database.port" : "32050"
+      }
+    },
+    {
+      "ta-server-config" : {
+        "jetty.server.stop.port" : "32000",
+        "jetty.server.start.port" : "32005"
+      }
+    },
+    {
+      "r" : {
+        "user.accept.R.Licenses" : "Y"
+      }
+    },
+    { "config" :
+      {
+       "bigsheets.webserver.jvmargs" : "-XX:MaxPermSize=256m -Xms1G -Xmx1G"
+      }
+    },
+    {
+      "bigsheets-ambari-config" : {
+        "ambari.user" : "admin",
+        "ambari.userpassword" : "admin"
+      }
+    },
+    {
+      "dsm-config" : {
+        "dsm_admin_user" : "biadmin",
+        "dsm_server_port": "11080",
+        "dsm_user" : "dsmuser",
+        "dsm_group" : "hadoop"
+      }
+    },
+    {
+      "dsm-env" : {
+        "dsm_version" : "1.1.1.1",
+        "ibm_valuepack_dir" : "/usr/ibmpacks"
+      }
+    },
+    {
+      "bigsql-env" : {
+        "bigsql_continue_on_failure":"false",
+        "bigsql_db_path":"/var/ibm/bigsql/database",
+        "bigsql_ha_port":"20008",
+        "bigsql_hdfs_poolname":"autocachepool",
+        "bigsql_hdfs_poolsize":"0",
+        "bigsql_resource_percent":"25",
+        "db2_fcm_port_number":"28051",
+        "db2_port_number":"32051",
+        "enable_yarn":"NO",
+        "scheduler_admin_port":"7054",
+        "scheduler_service_port":"7053"
+      }
+    },
+    {
+      "bigsql-users-env" : {
+        "ambari_user_login":"admin",
+        "ambari_user_password":"admin",
+        "bigsql_user" :"bigsql",
+        "bigsql_user_id":"2824",
+        "bigsql_user_password":"bigsql",
+        "enable_ldap":"NO"
+      }
+    }
+  ],
+  "host_groups": [
+    {
+      "name": "MGMT1",
+      "components": [
+        {"name": "KNOX_GATEWAY"},
+		{"name": "WEBUIFRAMEWORK_MASTER"},
+		{"name": "TEXTANALYTICS_MASTER"},
+		{"name": "BIGSHEETS_MASTER"},
+		{"name": "NODEMANAGER"},
+		{"name": "HIVE_SERVER"},
+		{"name": "HIVE_METASTORE"},
+        {"name": "HISTORYSERVER"},
+		{"name": "NAMENODE"},
+        {"name": "PIG"},
+ 		{"name": "SECONDARY_NAMENODE"},
+		{"name": "ZOOKEEPER_SERVER"},
+        {"name": "SQOOP"},
+        {"name": "SLIDER"},              
+        {"name": "ZOOKEEPER_CLIENT"},        
+        {"name": "HDFS_CLIENT"},
+        {"name": "MAPREDUCE2_CLIENT"},
+		{"name": "DATANODE"},
+		{"name": "APP_TIMELINE_SERVER"},
+        {"name": "YARN_CLIENT"},
+        {"name": "HIVE_CLIENT"},      
+        {"name": "OOZIE_CLIENT"},
+        {"name": "METRICS_MONITOR"},
+        {"name": "METRICS_COLLECTOR"},
+        {"name": "RESOURCEMANAGER"},
+		{"name": "HBASE_MASTER"},
+        {"name": "HBASE_REGIONSERVER"},
+		{"name": "FLUME_HANDLER"},
+		{"name": "HBASE_CLIENT"},
+		{"name": "HCAT"},
+		{"name": "WEBHCAT_SERVER"},
+		{"name": "OOZIE_SERVER"}, 
+		{"name": "SPARK_THRIFTSERVER"},
+		{"name": "SPARK_CLIENT"},
+		{"name": "SPARK_JOBHISTORYSERVER"},
+		{"name": "TEXTANALYTICS_CLIENT"},
+        {"name": "RESOURCEMANAGER"},
+		{"name": "BIGRCONNECTOR"},
+		{"name": "BIGRCLIENT"},
+		{"name": "R"},
+		{"name": "DSM_Master"},
+		{"name": "JSQSH"}
+      ],
+      "configurations" : [ ],
+      "cardinality": "1"
+    }
+    ],
+    "Blueprints": {
+      "blueprint_name": "qse-1-nodes-41",
+      "stack_name": "BigInsights",
+      "stack_version": "4.1"
+    }
+  }

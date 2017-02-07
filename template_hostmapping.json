@@ -1,0 +1,16 @@
+{
+"blueprint":"qse-5-nodes-41",
+"default_password":"admin",
+   "host_groups":[
+    { "name":"MGMT1",
+      "hosts":[ { "fqdn":"${MGMT1}" } ]
+        },
+    { "name":"MGMT2",
+      "hosts":[ { "fqdn":"${MGMT2}" } ]
+        },
+    { "name":"WORKER",
+      "hosts":[ ${WORKERS} ]
+        }
+  ]
+}
+
