@@ -3,7 +3,7 @@
 "default_password":"admin",
 "host_groups":[
 { "name":"MGMT1",
-"hosts":[ { "fqdn":"sherpavm" } ] }
+"hosts":[ { "fqdn":"v-npiprod01" } ] }
 ]
 }
 
